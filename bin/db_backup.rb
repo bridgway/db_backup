@@ -6,7 +6,10 @@ require 'optparse'
 require 'open3'
 require 'fileutils'
 
-options = {}
+options = {
+	:gzip => true
+}
+
 option_parser = OptionParser.new do |opts| 
 
 	executable_name = File.basename($PROGRAM_NAME)
@@ -17,25 +20,38 @@ Usage: #{executable_name} [options] database_name
 EOS
 
 	# create a switch
-	opts.on("-i", "--iteration", 
+	opts.on("-i", 
+					"--end-of-iteration", 
 					"Indicate that this backup is an 'iteration' backup") do
 		options[:interation] = true
 	end
 
 	# crate a flag
-	opts.on("-u USER", "Database username, in first.last format") do |user|
+	opts.on("-u USER", 
+					"--username",
+					"Database username, in first.last format") do |user|
 		unless user =~ /^.+\..+$/
 			raise ArgumentError, "USER must be in 'first.last' format"
 		end
 		options[:user] = user
 	end
 
-	opts.on("-p PASSWORD", "Database password") do |password|
+	opts.on("-p PASSWORD",
+					"--password",  
+					"Database password") do |password|
 		options[:password] = password
 	end
 
 	opts.on("-d DATABASE") do |database|
 		options[:database] = database
+	end
+
+	opts.on("--no-gzip", "Do not compress the backup file") do |database|
+		options[:gzip] = false
+	end
+
+	opts.on("--[no-]force", "Overwrite existing files") do |force|
+		options[:force] = true
 	end
 end
 
@@ -72,24 +88,24 @@ end
 
 command = "/usr/local/mysql/bin/mysqldump #{auth}#{database_name} > #{output_file}"
 
-
-if ENV['NO_RUN']
-  def system(cmd) # not command?
-    puts cmd
-    true
-  end
-end
-if false
-system(command)
+if File.exists? output_file
+	if options[:force] == true
+		STDERR.puts "Overwriting #{output_file}"
+	else
+		STDERR.puts "error: #{output_file} exists, use --force to overwrite"
+		exit 1
+	end
 end
 
-puts "Running '#{command}'"
-stdout_str, stderr_str, status = Open3.capture3(command)
+unless ENV['NO_RUN']
+	puts "Running '#{command}'"
+	stdout_str, stderr_str, status = Open3.capture3(command)
 
-unless status.success?
-  STDERR.puts "There was a problem running '#{command}'"
-  STDERR.puts stderr_str.gsub(/^mysqldump: /,'')
-  exit 1
+	unless status.success?
+	  STDERR.puts "There was a problem running '#{command}'"
+	  STDERR.puts stderr_str.gsub(/^mysqldump: /,'')
+	  exit 1
+	end
 end
 
 
@@ -123,4 +139,6 @@ end
 
 
 # `mysqldump -u#{username} -p#{password} #{database} > #{backup_file}.sql`
-`gzip #{output_file}.sql`
+
+# zip backup file unless user has set options[:gzip] to false. 
+`gzip #{output_file}.sql` if options[:gzip] == true 
