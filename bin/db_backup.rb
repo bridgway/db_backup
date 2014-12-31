@@ -5,10 +5,24 @@
 require 'optparse'
 require 'open3'
 require 'fileutils'
+require 'yaml'
 
 options = {
-	:gzip => true
+	:gzip => true,
+	:force => false,
+	:'end-of-iteration' => false,
+	:username => nil,
+	:password => nil,
 }
+
+CONFIG_FILE = File.join(ENV['HOME'], '.db_backup.rc.yaml')
+if File.exists? CONFIG_FILE
+	config_options = YAML.load_file(CONFIG_FILE)
+	options.merge!(config_options)
+else
+	File.open(CONFIG_FILE,'w') { |file| YAML::dump(options, file) }
+	STDERR.puts "Initialized configuration file in #{CONFIG_FILE}"
+end
 
 option_parser = OptionParser.new do |opts| 
 
@@ -23,7 +37,7 @@ EOS
 	opts.on("-i", 
 					"--end-of-iteration", 
 					"Indicate that this backup is an 'iteration' backup") do
-		options[:interation] = true
+		options[:'end-of-iteration'] = true
 	end
 
 	# crate a flag
@@ -75,7 +89,7 @@ auth += "-p#{options[:password]} " if options[:password]
 
 database_name = ARGV[0]
 
-if options[:interation] == false
+if options[:'end-of-iteration'] == false
 	output_file = database_name + Time.now.strftime("%Y%m%d") + ".sql"
 else
 	output_file = database_name + "end_of_interation" + ".sql"
